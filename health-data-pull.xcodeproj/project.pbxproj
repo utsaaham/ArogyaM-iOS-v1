@@ -10,9 +10,22 @@
 		E0CCC3AB2F85BF08000E1F0B /* health-data-pull.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "health-data-pull.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E0CCC3BB2F85C3AF000E1F0B /* Exceptions for "health-data-pull" folder in "health-data-pull" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E0CCC3AA2F85BF08000E1F0B /* health-data-pull */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E0CCC3AD2F85BF08000E1F0B /* health-data-pull */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E0CCC3BB2F85C3AF000E1F0B /* Exceptions for "health-data-pull" folder in "health-data-pull" target */,
+			);
 			path = "health-data-pull";
 			sourceTree = "<group>";
 		};
@@ -251,11 +264,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "health-data-pull/health-data-pull.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CV7PDDUS42;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "health-data-pull/Info.plist";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads your Apple Watch health data";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app saves health data";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -283,11 +300,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "health-data-pull/health-data-pull.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CV7PDDUS42;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "health-data-pull/Info.plist";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads your Apple Watch health data";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app saves health data";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
