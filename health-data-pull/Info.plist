@@ -2,7 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>Rhythm</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>This app needs local network access to send health data to your Mac.</string>
+	<string>Rhythm uses local network access to send your health data to your server.</string>
 </dict>
 </plist>

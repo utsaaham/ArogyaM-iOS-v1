@@ -1,217 +1,259 @@
 import SwiftUI
-import HealthKit
 
 struct ContentView: View {
-    let healthStore = HKHealthStore()
-    @State private var heartRate: Double = 0
-    @State private var steps: Double = 0
-    @State private var calories: Double = 0
-    @State private var distance: Double = 0
-    @State private var sleepHours: Double = 0
-    @State private var workouts: [HKWorkout] = []
-    @State private var sendStatus: String = ""
-
-    var todayPredicate: NSPredicate {
-        HKQuery.predicateForSamples(withStart: Calendar.current.startOfDay(for: Date()), end: Date())
-    }
+    @State private var payload: WeeklyHealthPayload?
+    @State private var status: String = ""
+    @State private var isBusy: Bool = false
+    @State private var connectedDevices: [String] = []
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
-                Section("Today's Stats") {
-                    Text("❤️ Heart Rate: \(Int(heartRate)) BPM")
-                    Text("👟 Steps: \(Int(steps))")
-                    Text("🔥 Calories: \(Int(calories)) kcal")
-                    Text("📏 Distance: \(String(format: "%.2f", distance)) km")
-                    Text("😴 Sleep: \(String(format: "%.1f", sleepHours)) hrs")
+                if !status.isEmpty {
+                    Section { Text(status).bold() }
                 }
 
-                Section("Today's Workouts") {
-                    if workouts.isEmpty {
-                        Text("No workouts today").foregroundColor(.gray)
+                Section("Connectors") {
+                    if connectedDevices.isEmpty {
+                        Text("No connectors detected").foregroundStyle(.secondary)
                     } else {
-                        ForEach(workouts, id: \.uuid) { workout in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(workoutName(workout.workoutActivityType)).font(.headline)
-                                HStack {
-                                    Text("🕐 \(Int(workout.duration / 60)) min")
-                                    Spacer()
-                                    Text("🔥 \(Int(workout.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)) kcal")
-                                }
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            }
-                            .padding(.vertical, 4)
+                        ForEach(connectedDevices, id: \.self) { device in
+                            Label(device, systemImage: deviceIcon(for: device))
                         }
                     }
                 }
 
-                if !sendStatus.isEmpty {
-                    Section {
-                        Text(sendStatus)
+                Section {
+                    DaySnapshotDetail(snapshot: payload?.today, todayLabels: true)
+                } header: {
+                    SectionHeader(
+                        title: "Today",
+                        subtitle: formatDay(payload?.today.date)
+                    )
+                }
+
+                Section {
+                    if let days = payload?.previousDays, !days.isEmpty {
+                        ForEach(days, id: \.date) { day in
+                            DisclosureGroup(formatDay(day.date)) {
+                                DaySnapshotDetail(snapshot: day, todayLabels: false)
+                            }
+                        }
+                    } else {
+                        Text("—").foregroundStyle(.secondary)
                     }
+                } header: {
+                    SectionHeader(
+                        title: "Last Week",
+                        subtitle: "Extracted · past 7 days"
+                    )
                 }
             }
-            .navigationTitle("Today's Health")
+            .navigationTitle("Rhythm")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Refresh") { requestPermissionsAndSend() }
+                    Button("Refresh") { Task { await refresh() } }
+                        .disabled(isBusy)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Send") { sendToAPI() }
+                    Button("Send") { Task { await send() } }
                         .bold()
+                        .disabled(isBusy || payload == nil)
                 }
             }
         }
-        .onAppear { requestPermissionsAndSend() }
+        .task { await initialLoad() }
     }
 
-    // MARK: - Send JSON to server
-    func sendToAPI() {
-        let payload: [String: Any] = [
-            "date": ISO8601DateFormatter().string(from: Date()),
-            "heartRate": Int(heartRate),
-            "steps": Int(steps),
-            "calories": Int(calories),
-            "distanceKm": round(distance * 100) / 100,
-            "sleepHours": round(sleepHours * 10) / 10,
-            "workouts": workouts.map { w in
-                [
-                    "type": workoutName(w.workoutActivityType),
-                    "durationMin": Int(w.duration / 60),
-                    "calories": Int(w.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
-                ] as [String: Any]
+    private func initialLoad() async {
+        status = "Requesting permission…"
+        do {
+            try await HealthKitService.shared.requestAuthorization()
+        } catch {
+            status = "❌ Auth error: \(error.localizedDescription)"
+            return
+        }
+        await refresh()
+    }
+
+    private func refresh() async {
+        isBusy = true
+        status = "Loading…"
+        async let p = HealthKitService.shared.fetchWeeklyPayload()
+        async let devices = HealthKitService.shared.fetchConnectedSources()
+        self.payload = await p
+        self.connectedDevices = await devices
+        status = "⌚ Week extracted (today + 7 prior days)"
+        isBusy = false
+    }
+
+    private func send() async {
+        guard let p = payload else {
+            status = "❌ Nothing to send — tap Refresh first"
+            return
+        }
+        isBusy = true
+        status = "Sending…"
+        do {
+            try await APIClient.shared.send(p)
+            status = "⌚ Week of data sent"
+        } catch {
+            status = error.localizedDescription
+        }
+        isBusy = false
+    }
+
+    private func deviceIcon(for name: String) -> String {
+        let lower = name.lowercased()
+        if lower.contains("watch") { return "applewatch" }
+        if lower.contains("iphone") || lower.contains("phone") { return "iphone" }
+        if lower.contains("ipad") { return "ipad" }
+        if lower.contains("health") { return "heart.fill" }
+        return "sensor.fill"
+    }
+}
+
+private struct DaySnapshotDetail: View {
+    let snapshot: HealthSnapshot?
+    let todayLabels: Bool
+
+    var body: some View {
+        if let bpm = snapshot?.heart.avgBpm {
+            MetricRow(icon: "heart.fill", tint: .red,
+                      label: "Heart Rate" + (todayLabels ? " (avg today)" : " (avg)"),
+                      value: "\(bpm) BPM")
+        } else if snapshot != nil {
+            MetricRow(icon: "heart.fill", tint: .red, label: "Heart Rate", value: "—")
+        } else {
+            Text("—").foregroundStyle(.secondary)
+        }
+
+        MetricRow(icon: "figure.walk", tint: .green,
+                  label: "Steps",
+                  value: "\(snapshot?.activity.steps ?? 0)")
+        MetricRow(icon: "flame.fill", tint: .orange,
+                  label: "Active Calories",
+                  value: "\(snapshot?.activity.activeCalories ?? 0) kcal")
+        MetricRow(icon: "location.fill", tint: .blue,
+                  label: "Distance",
+                  value: "\(String(format: "%.2f", snapshot?.activity.distanceKm ?? 0)) km")
+
+        if let sleep = snapshot?.sleep {
+            DisclosureGroup {
+                Text("· Core: \(String(format: "%.1f", sleep.stages.coreHours)) hrs")
+                Text("· Deep: \(String(format: "%.1f", sleep.stages.deepHours)) hrs")
+                Text("· REM: \(String(format: "%.1f", sleep.stages.remHours)) hrs")
+                Text("· Awake: \(String(format: "%.1f", sleep.stages.awakeHours)) hrs")
+            } label: {
+                MetricRow(icon: "moon.zzz.fill", tint: .indigo,
+                          label: "Sleep",
+                          value: "\(String(format: "%.1f", sleep.totalHours)) hrs")
             }
-        ]
+        } else if snapshot != nil {
+            MetricRow(icon: "moon.zzz.fill", tint: .indigo, label: "Sleep", value: "—")
+        }
 
-        guard let url = URL(string: Config.serverURL),
-              let body = try? JSONSerialization.data(withJSONObject: payload) else { return }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(Config.bearerToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = body
-
-        sendStatus = "Sending..."
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    let code = (error as NSError).code
-                    switch code {
-                    case -1009: sendStatus = "❌ No network / local network blocked (code -1009)"
-                    case -1004: sendStatus = "❌ Cannot connect to server — is node server.js running? (code -1004)"
-                    case -1003: sendStatus = "❌ Server not found — check IP in Config.swift (code -1003)"
-                    case -1001: sendStatus = "❌ Request timed out (code -1001)"
-                    default:    sendStatus = "❌ Error \(code): \(error.localizedDescription)"
-                    }
-                    return
+        if let workouts = snapshot?.workouts, !workouts.isEmpty {
+            let totalKcal = workouts.reduce(0) { $0 + $1.calories }
+            DisclosureGroup {
+                ForEach(workouts) { w in
+                    WorkoutRow(workout: w)
                 }
-                if let http = response as? HTTPURLResponse {
-                    if http.statusCode == 200 {
-                        sendStatus = "✅ Sent!"
-                    } else if http.statusCode == 401 {
-                        sendStatus = "❌ Unauthorised (401) — bearer token mismatch"
-                    } else {
-                        let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "no body"
-                        sendStatus = "❌ HTTP \(http.statusCode): \(body)"
-                    }
-                }
+            } label: {
+                MetricRow(icon: "figure.run", tint: .pink,
+                          label: "Workouts",
+                          value: "\(totalKcal) kcal")
             }
-        }.resume()
+        } else if snapshot != nil {
+            MetricRow(icon: "figure.run", tint: .pink, label: "Workouts", value: "None")
+        }
     }
+}
 
-    // MARK: - Permissions
-    func requestPermissionsAndSend() {
-        let typesToRead: Set<HKObjectType> = [
-            HKObjectType.quantityType(forIdentifier: .heartRate)!,
-            HKObjectType.quantityType(forIdentifier: .stepCount)!,
-            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
-            HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
-            HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!,
-            HKObjectType.workoutType()
-        ]
-        healthStore.requestAuthorization(toShare: nil, read: typesToRead) { success, _ in
-            if success {
-                fetchHeartRate(); fetchSteps(); fetchCalories()
-                fetchDistance(); fetchSleep(); fetchWorkouts()
-                // Allow HealthKit queries time to complete before sending
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    sendToAPI()
-                }
+private struct MetricRow: View {
+    let icon: String
+    let tint: Color
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(tint.opacity(0.18))
+                    .frame(width: 28, height: 28)
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            Text(label)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct WorkoutRow: View {
+    let workout: WorkoutSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(workout.type).font(.headline)
+            HStack {
+                Text("🕐 \(workout.durationMin) min")
+                Spacer()
+                Text("🔥 \(workout.calories) kcal")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            if workout.distanceKm > 0 {
+                Text("📏 \(String(format: "%.2f", workout.distanceKm)) km")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let hr = workout.avgHeartRate {
+                Text("❤️ \(hr) BPM avg")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
+        .padding(.vertical, 4)
     }
+}
 
-    // MARK: - Fetch
-    func fetchHeartRate() {
-        let type = HKQuantityType.quantityType(forIdentifier: .heartRate)!
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: type, predicate: todayPredicate, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
-            if let sample = samples?.first as? HKQuantitySample {
-                DispatchQueue.main.async { self.heartRate = sample.quantity.doubleValue(for: HKUnit(from: "count/min")) }
-            }
-        }
-        healthStore.execute(query)
-    }
+private struct SectionHeader: View {
+    let title: String
+    let subtitle: String
 
-    func fetchSteps() {
-        let type = HKQuantityType.quantityType(forIdentifier: .stepCount)!
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: todayPredicate, options: .cumulativeSum) { _, result, _ in
-            DispatchQueue.main.async { self.steps = result?.sumQuantity()?.doubleValue(for: .count()) ?? 0 }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
+                .textCase(nil)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textCase(nil)
         }
-        healthStore.execute(query)
+        .padding(.vertical, 6)
     }
+}
 
-    func fetchCalories() {
-        let type = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: todayPredicate, options: .cumulativeSum) { _, result, _ in
-            DispatchQueue.main.async { self.calories = result?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0 }
-        }
-        healthStore.execute(query)
-    }
+private let dayParser: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withFullDate]
+    return f
+}()
 
-    func fetchDistance() {
-        let type = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: todayPredicate, options: .cumulativeSum) { _, result, _ in
-            DispatchQueue.main.async { self.distance = (result?.sumQuantity()?.doubleValue(for: .meter()) ?? 0) / 1000.0 }
-        }
-        healthStore.execute(query)
-    }
+private let dayDisplay: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "EEE, MMM d"
+    return f
+}()
 
-    func fetchSleep() {
-        let type = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: type, predicate: todayPredicate, limit: 10, sortDescriptors: [sort]) { _, samples, _ in
-            let total = samples?.compactMap { $0 as? HKCategorySample }
-                .filter { $0.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue }
-                .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } ?? 0
-            DispatchQueue.main.async { self.sleepHours = total / 3600.0 }
-        }
-        healthStore.execute(query)
-    }
-
-    func fetchWorkouts() {
-        let type = HKObjectType.workoutType()
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: type, predicate: todayPredicate, limit: 20, sortDescriptors: [sort]) { _, samples, _ in
-            DispatchQueue.main.async { self.workouts = (samples as? [HKWorkout]) ?? [] }
-        }
-        healthStore.execute(query)
-    }
-
-    func workoutName(_ type: HKWorkoutActivityType) -> String {
-        switch type {
-        case .running: return "Running"
-        case .walking: return "Walking"
-        case .cycling: return "Cycling"
-        case .swimming: return "Swimming"
-        case .yoga: return "Yoga"
-        case .hiking: return "Hiking"
-        case .dance: return "Dance"
-        case .functionalStrengthTraining: return "Strength"
-        default: return "Workout"
-        }
-    }
+private func formatDay(_ iso: String?) -> String {
+    guard let iso, let date = dayParser.date(from: iso) else { return "—" }
+    return dayDisplay.string(from: date)
 }
