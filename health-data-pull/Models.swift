@@ -2,12 +2,12 @@ import Foundation
 
 struct WeeklyHealthPayload: Codable, Sendable {
     let extractedAt: String
-    let today: HealthSnapshot
-    let previousDays: [HealthSnapshot]
+    let days: [HealthSnapshot]
 }
 
 struct HealthSnapshot: Codable, Sendable {
     let date: String
+    let today: Bool?
     let heart: HeartMetrics
     let activity: ActivityMetrics
     let sleep: SleepMetrics?

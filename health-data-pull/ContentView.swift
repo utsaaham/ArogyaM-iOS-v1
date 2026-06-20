@@ -6,6 +6,14 @@ struct ContentView: View {
     @State private var isBusy: Bool = false
     @State private var connectedDevices: [String] = []
 
+    private var todayDay: HealthSnapshot? {
+        payload?.days.first(where: { $0.today == true })
+    }
+
+    private var pastDays: [HealthSnapshot] {
+        (payload?.days ?? []).filter { $0.today != true }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -24,17 +32,17 @@ struct ContentView: View {
                 }
 
                 Section {
-                    DaySnapshotDetail(snapshot: payload?.today, todayLabels: true)
+                    DaySnapshotDetail(snapshot: todayDay, todayLabels: true)
                 } header: {
                     SectionHeader(
                         title: "Today",
-                        subtitle: formatDay(payload?.today.date)
+                        subtitle: formatDay(todayDay?.date)
                     )
                 }
 
                 Section {
-                    if let days = payload?.previousDays, !days.isEmpty {
-                        ForEach(days, id: \.date) { day in
+                    if !pastDays.isEmpty {
+                        ForEach(pastDays, id: \.date) { day in
                             DisclosureGroup(formatDay(day.date)) {
                                 DaySnapshotDetail(snapshot: day, todayLabels: false)
                             }
@@ -241,14 +249,18 @@ private struct SectionHeader: View {
     }
 }
 
-private let dayParser: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withFullDate]
+private let dayParser: DateFormatter = {
+    let f = DateFormatter()
+    f.calendar = Calendar(identifier: .gregorian)
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .current
+    f.dateFormat = "yyyy-MM-dd"
     return f
 }()
 
 private let dayDisplay: DateFormatter = {
     let f = DateFormatter()
+    f.timeZone = .current
     f.dateFormat = "EEE, MMM d"
     return f
 }()

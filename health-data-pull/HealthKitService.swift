@@ -24,29 +24,28 @@ final class HealthKitService {
     func fetchWeeklyPayload() async -> WeeklyHealthPayload {
         let cal = Calendar.current
         let now = Date()
-        let previousDates: [Date] = (1...7).compactMap {
-            cal.date(byAdding: .day, value: -$0, to: now)
+        // Indices 0…7: 0 = today, 1 = yesterday, …, 7 = 7 days ago.
+        let dates: [Date] = (0...7).compactMap {
+            $0 == 0 ? now : cal.date(byAdding: .day, value: -$0, to: now)
         }
 
-        async let todaySnap = fetchSnapshot(for: now)
-
-        let prior: [HealthSnapshot] = await withTaskGroup(of: (Int, HealthSnapshot).self) { group in
-            for (i, d) in previousDates.enumerated() {
-                group.addTask { (i, await self.fetchSnapshot(for: d)) }
+        let days: [HealthSnapshot] = await withTaskGroup(of: (Int, HealthSnapshot).self) { group in
+            for (i, d) in dates.enumerated() {
+                let isToday = (i == 0)
+                group.addTask { (i, await self.fetchSnapshot(for: d, isToday: isToday)) }
             }
-            var collected = Array<HealthSnapshot?>(repeating: nil, count: previousDates.count)
+            var collected = Array<HealthSnapshot?>(repeating: nil, count: dates.count)
             for await (i, s) in group { collected[i] = s }
             return collected.compactMap { $0 }
         }
 
         return WeeklyHealthPayload(
             extractedAt: Self.iso.string(from: Date()),
-            today: await todaySnap,
-            previousDays: prior
+            days: days
         )
     }
 
-    func fetchSnapshot(for date: Date) async -> HealthSnapshot {
+    func fetchSnapshot(for date: Date, isToday: Bool = false) async -> HealthSnapshot {
         async let hr     = avgHeartRate(on: date)
         async let steps  = sum(.stepCount, unit: .count(), on: date)
         async let cals   = sum(.activeEnergyBurned, unit: .kilocalorie(), on: date)
@@ -61,6 +60,7 @@ final class HealthKitService {
 
         return HealthSnapshot(
             date: Self.isoDay.string(from: date),
+            today: isToday ? true : nil,
             heart: HeartMetrics(avgBpm: hrVal),
             activity: ActivityMetrics(
                 steps: Int(stepsVal.rounded()),
@@ -247,9 +247,12 @@ final class HealthKitService {
         return f
     }()
 
-    private static let isoDay: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withFullDate]
+    private static let isoDay: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
         return f
     }()
 
