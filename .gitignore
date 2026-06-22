@@ -1,0 +1,22 @@
+# Environment / secrets
+.env
+.env.local
+*.env
+!.env.example
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/

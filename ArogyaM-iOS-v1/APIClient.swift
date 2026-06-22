@@ -31,14 +31,15 @@ struct APIClient {
     static let shared = APIClient()
 
     func send(_ payload: WeeklyHealthPayload) async throws {
-        guard let url = URL(string: Config.sendDataURL) else {
+        guard let endpoint = Config.sendDataURL, let url = URL(string: endpoint),
+              let token = Config.bearerToken, !token.isEmpty else {
             throw APIError.badURL
         }
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(Config.bearerToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         do {
             req.httpBody = try JSONEncoder().encode(payload)
