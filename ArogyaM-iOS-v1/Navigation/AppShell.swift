@@ -9,7 +9,7 @@ struct AppShell: View {
     @State private var showAI = false
 
     /// Scroll views pad their bottom content by this amount so it clears the bar.
-    static let bottomBarInset: CGFloat = 108
+    static let bottomBarInset: CGFloat = 124
 
     var body: some View {
         // Feature content — respects the safe area so scroll content sits
@@ -34,7 +34,7 @@ struct AppShell: View {
         .overlay(alignment: .bottom) {
             FloatingTabBar(selected: $tab) { showAI = true }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.bottom, -10)
         }
         .fullScreenCover(isPresented: $showAI) {
             AIAssistantView()

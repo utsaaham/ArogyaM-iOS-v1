@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 import Combine
 
 @MainActor
@@ -62,8 +61,6 @@ struct WaterView: View {
                 SectionTitle(title: "Water", subtitle: "Stay hydrated").padding(.top, 6)
                 heroCard
                 quickAdd
-                if !store.history.isEmpty { historyChart }
-                if !store.recent.isEmpty { recentList }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, AppShell.bottomBarInset)
@@ -75,19 +72,40 @@ struct WaterView: View {
     }
 
     private var heroCard: some View {
-        VStack(spacing: 18) {
-            WaterRing(fraction: store.fraction, size: 178)
+        let remaining = max(0, store.goal - store.todayIntake)
+        return VStack(spacing: 18) {
+            WaterBottle(fraction: store.fraction, height: 190)
+
             VStack(spacing: 3) {
                 Text("\(Int(store.todayIntake)) ml")
                     .font(Theme.number(36, .bold)).foregroundStyle(Theme.text)
                 Text("of \(Int(store.goal)) ml goal")
                     .font(Theme.body(13)).foregroundStyle(Theme.textSecondary)
             }
+
+            HStack(spacing: 10) {
+                statPill(icon: "flag.checkered", value: "\(Int(remaining))", unit: "ml left")
+                statPill(icon: "drop.fill", value: "\(store.glassesDone)/\(store.glassesGoal)", unit: "glasses")
+            }
+
             glassesRow
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .glassCard(padding: 22)
+    }
+
+    private func statPill(icon: String, value: String, unit: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.textSecondary)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value).font(Theme.number(16, .bold)).foregroundStyle(Theme.text)
+                Text(unit).font(Theme.body(11)).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface))
     }
 
     private var glassesRow: some View {
@@ -125,98 +143,31 @@ struct WaterView: View {
         .glassCard()
     }
 
-    private var historyChart: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("LAST 14 DAYS").font(Theme.body(11, .semibold)).tracking(0.8).foregroundStyle(Theme.textMuted)
-            Chart(store.history, id: \.date) { point in
-                BarMark(
-                    x: .value("Day", point.date ?? ""),
-                    y: .value("ml", point.waterIntake ?? 0)
-                )
-                .foregroundStyle(Theme.cyan.gradient)
-                .cornerRadius(4)
-            }
-            .chartXAxis(.hidden)
-            .chartYAxis {
-                AxisMarks(values: .automatic(desiredCount: 3)) {
-                    AxisGridLine().foregroundStyle(Theme.hairline)
-                    AxisValueLabel().foregroundStyle(Theme.textMuted)
-                }
-            }
-            .frame(height: 130)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard()
-    }
-
-    private var recentList: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("TODAY'S LOG").font(Theme.body(11, .semibold)).tracking(0.8).foregroundStyle(Theme.textMuted)
-            ForEach(Array(store.recent.prefix(8).enumerated()), id: \.offset) { _, entry in
-                HStack {
-                    Image(systemName: "drop.fill").foregroundStyle(Theme.cyan).font(.system(size: 13))
-                    Text("\(Int(entry.amount ?? 0)) ml").font(Theme.body(14, .medium)).foregroundStyle(Theme.text)
-                    Spacer()
-                    Text(entry.time ?? "").font(Theme.body(13)).foregroundStyle(Theme.textMuted)
-                }
-                .padding(.vertical, 4)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard()
-    }
 }
 
-/// Circular water ring (watchOS Water style): an animated wave fills a circle,
-/// with the percentage shown in the centre and a soft ring around it.
-struct WaterRing: View {
+/// A proper water-bottle silhouette that fills from the bottom up according to
+/// the day's hydration progress, with the percentage shown in the centre.
+struct WaterBottle: View {
     var fraction: Double
-    var size: CGFloat = 178
-    @State private var phase = 0.0
+    var height: CGFloat = 190
 
     private var clamped: Double { max(0, min(fraction, 1)) }
 
     var body: some View {
         ZStack {
-            Circle().fill(Theme.cyan.opacity(0.10))
-            WaterWave(phase: phase, fillFraction: clamped)
-                .fill(LinearGradient(colors: [Theme.cyan.opacity(0.7), Theme.cyan],
-                                     startPoint: .top, endPoint: .bottom))
-                .clipShape(Circle())
-            Circle().strokeBorder(Theme.cyan.opacity(0.22), lineWidth: 2)
-            Text("\(Int(clamped * 100))%")
-                .font(.system(size: 38, weight: .bold, design: .rounded))
-                .foregroundStyle(clamped > 0.45 ? .white : Theme.cyan)
-                .shadow(color: .black.opacity(clamped > 0.45 ? 0.12 : 0), radius: 3, y: 1)
+            // Empty bottle outline
+            Image(systemName: "waterbottle.fill")
+                .resizable().scaledToFit()
+                .foregroundStyle(Theme.cyan.opacity(0.16))
+            // Water that rises with progress
+            Image(systemName: "waterbottle.fill")
+                .resizable().scaledToFit()
+                .foregroundStyle(Theme.cyan)
+                .mask(alignment: .bottom) {
+                    Rectangle().frame(height: height * clamped)
+                }
         }
-        .frame(width: size, height: size)
-        .shadow(color: Theme.cyan.opacity(0.25), radius: 16, y: 8)
-        .onAppear {
-            withAnimation(.linear(duration: 2.2).repeatForever(autoreverses: false)) { phase = .pi * 2 }
-        }
-    }
-}
-
-private struct WaterWave: Shape {
-    var phase: Double
-    var fillFraction: Double
-    var animatableData: Double {
-        get { phase }
-        set { phase = newValue }
-    }
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let waveHeight = rect.height * 0.02
-        let baseY = rect.height * (1 - fillFraction)
-        path.move(to: CGPoint(x: 0, y: baseY))
-        for x in stride(from: 0.0, through: rect.width, by: 2) {
-            let relativeX = x / rect.width
-            let y = baseY + waveHeight * sin(phase + relativeX * .pi * 2.5)
-            path.addLine(to: CGPoint(x: x, y: y))
-        }
-        path.addLine(to: CGPoint(x: rect.width, y: rect.height))
-        path.addLine(to: CGPoint(x: 0, y: rect.height))
-        path.closeSubpath()
-        return path
+        .frame(width: height * 0.62, height: height)
+        .animation(.easeOut(duration: 0.5), value: clamped)
     }
 }

@@ -30,9 +30,9 @@ struct FloatingTabBar: View {
             .clipShape(Capsule())
             .overlay {
                 Capsule()
-                    .strokeBorder(specularBorder, lineWidth: 1)
+                    .strokeBorder(Theme.hairline, lineWidth: 0.5)
             }
-            .shadow(color: .black.opacity(0.22), radius: 28, y: 10)
+            .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
 
             // ── Kiki — bottom-aligned with pill, floats above ──
             Button(action: onAI) {
@@ -42,7 +42,7 @@ struct FloatingTabBar: View {
                     .frame(width: 88, height: 88)
             }
             .buttonStyle(SpringyButtonStyle())
-            .offset(y: -(88 - pillHeight) / 2 - 4)   // float above pill floor
+            .offset(y: -(88 - pillHeight) / 2 + 12)   // float above pill floor
         }
     }
 
@@ -50,25 +50,11 @@ struct FloatingTabBar: View {
 
     private var liquidGlass: some View {
         ZStack {
-            // Blur layer
-            Capsule().fill(.ultraThinMaterial)
-            // Top specular sheen
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [.white.opacity(0.30), .white.opacity(0.04)],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                )
+            // Frosted base that reads cleanly on the app's light background
+            Capsule().fill(.regularMaterial)
+            // Soft white lift so the pill sits above content
+            Capsule().fill(Color.white.opacity(0.55))
         }
-    }
-
-    private var specularBorder: LinearGradient {
-        LinearGradient(
-            colors: [.white.opacity(0.55), .white.opacity(0.08)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
 
     // MARK: - Tab item
@@ -83,23 +69,15 @@ struct FloatingTabBar: View {
             ZStack {
                 if isSelected {
                     Capsule()
-                        .fill(spec.tint.opacity(0.22))
+                        .fill(spec.tint.opacity(0.16))
                         .overlay {
-                            Capsule().fill(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.18), .clear],
-                                    startPoint: .top, endPoint: .bottom
-                                )
-                            )
-                        }
-                        .overlay {
-                            Capsule().strokeBorder(.white.opacity(0.35), lineWidth: 0.5)
+                            Capsule().strokeBorder(spec.tint.opacity(0.30), lineWidth: 0.5)
                         }
                         .matchedGeometryEffect(id: "highlight", in: ns)
                 }
                 Image(systemName: spec.icon)
                     .font(.system(size: 23, weight: .semibold))
-                    .foregroundStyle(isSelected ? spec.tint : .white.opacity(0.55))
+                    .foregroundStyle(isSelected ? spec.tint : Theme.textMuted)
                     .scaleEffect(isSelected ? 1.10 : 1.0)
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
             }

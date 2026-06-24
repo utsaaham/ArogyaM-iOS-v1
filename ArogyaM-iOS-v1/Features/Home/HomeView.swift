@@ -57,7 +57,6 @@ struct HomeView: View {
                     statsGrid
                     waterHeroCard
                     wearablesGrid
-                    badgesCard
                 }
             }
             .padding(.horizontal, 16)
@@ -138,6 +137,8 @@ struct HomeView: View {
     private var streakCard: some View {
         let c = store.achievements?.streaks?.current
         let b = store.achievements?.streaks?.best
+        // All streak types, paired with their best. Only show ones that are
+        // actually active (current >= 1).
         let items: [(String, Int, Int)] = [
             ("Active", c?.logging ?? 0, b?.logging ?? 0),
             ("Healthy", c?.healthy ?? 0, b?.healthy ?? 0),
@@ -145,13 +146,23 @@ struct HomeView: View {
             ("Water", c?.water ?? 0, b?.water ?? 0),
             ("Workouts", c?.workout ?? 0, b?.workout ?? 0),
             ("Sleep", c?.sleep ?? 0, b?.sleep ?? 0),
-        ]
+            ("Weight", c?.weight ?? 0, b?.weight ?? 0),
+            ("Steps", c?.steps ?? 0, b?.steps ?? 0),
+        ].filter { $0.1 >= 1 }
         return VStack(alignment: .leading, spacing: 12) {
             caption("ACTIVE STREAKS")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { _, it in
-                        streakChip(label: it.0, current: it.1, best: it.2)
+            if items.isEmpty {
+                Text("No active streaks yet — log today to start one 🔥")
+                    .font(Theme.body(13))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, it in
+                            streakChip(label: it.0, current: it.1, best: it.2)
+                        }
                     }
                 }
             }
@@ -327,8 +338,6 @@ struct HomeView: View {
             Image(systemName: icon).font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(value == nil ? Theme.textMuted : tint).frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Rectangle().fill(tint).frame(width: 16, height: 3).clipShape(Capsule())
-                    .padding(.bottom, 2)
                 Text(label).font(Theme.body(13, .semibold)).foregroundStyle(Theme.text)
                 Text(value ?? "No data").font(value == nil ? Theme.body(12) : Theme.number(15, .bold))
                     .foregroundStyle(value == nil ? Theme.textMuted : tint)
@@ -339,41 +348,4 @@ struct HomeView: View {
         .glassCard(padding: 15)
     }
 
-    // MARK: - Recent badges
-
-    private var badgesCard: some View {
-        let badges = (store.achievements?.badges ?? []).suffix(4).reversed().map { $0 }
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                caption("RECENT BADGES")
-                Spacer()
-                Text("View all").font(Theme.body(12, .semibold)).foregroundStyle(Theme.teal)
-            }
-            if badges.isEmpty {
-                HStack(spacing: 12) {
-                    ForEach(0..<2, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Theme.surface)
-                            .frame(height: 80)
-                            .overlay(Text("Locked").font(Theme.body(12)).foregroundStyle(Theme.textMuted))
-                    }
-                }
-            } else {
-                HStack(spacing: 12) {
-                    ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in
-                        VStack(spacing: 6) {
-                            Text(badge.icon ?? "🏅").font(.system(size: 28))
-                            Text(badge.name ?? "Badge").font(Theme.body(10, .medium))
-                                .foregroundStyle(Theme.textSecondary)
-                                .lineLimit(1).minimumScaleFactor(0.7)
-                        }
-                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface))
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard(padding: 16)
-    }
 }

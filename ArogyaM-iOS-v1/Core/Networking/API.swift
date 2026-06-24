@@ -52,6 +52,14 @@ final class API {
     struct Body {
         var json: Data?
         var form: [String: String]?
+
+        // Explicit nonisolated init so `Body()` can be used as a default
+        // argument value (default args evaluate in a nonisolated context,
+        // but this type is nested in a @MainActor class).
+        nonisolated init(json: Data? = nil, form: [String: String]? = nil) {
+            self.json = json
+            self.form = form
+        }
     }
 
     /// Performs a request against `Config.baseURL + path`. Returns raw data + response.
