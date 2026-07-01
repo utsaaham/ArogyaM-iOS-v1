@@ -4,6 +4,14 @@ A lightweight iOS app that reads your Apple Health data for the past week and se
 
 Built with **SwiftUI** and **HealthKit**, ArogyaM extracts a daily snapshot of heart rate, activity, sleep, and workouts — for today plus the previous 7 days — and lets you review it on-device before pushing it to an HTTP API with a single tap.
 
+## Guides
+
+| Guide | Use it for |
+|------|------------|
+| [README.md](README.md) | What this app does and how it works. |
+| [HOW_TO_CONNECT.md](HOW_TO_CONNECT.md) | Connecting the mobile app to ArogyaMandiram. |
+| [HOW_TO_LAUNCH.md](HOW_TO_LAUNCH.md) | Opening, signing, and running the app in Xcode. |
+
 ---
 
 ## Features
