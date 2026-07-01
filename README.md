@@ -14,7 +14,7 @@ Built with **SwiftUI** and **HealthKit**, ArogyaM extracts a daily snapshot of h
   - 🚶 Steps, active calories, and walking/running distance
   - 😴 Sleep with stage breakdown (core / deep / REM / awake), bedtime, and wake time
   - 🏃 Workouts with type, duration, calories, distance, and average heart rate
-- **Connector detection** — Lists the data sources feeding HealthKit (e.g. Apple Watch, iPhone).
+- **Connector detection** — Lists the data sources feeding HealthKit, such as phone and wearable sources.
 - **Review before send** — Inspect the full week in the UI, then POST it to your server.
 - **Clear error reporting** — Network and HTTP errors surface as readable, actionable messages.
 
@@ -32,7 +32,7 @@ Built with **SwiftUI** and **HealthKit**, ArogyaM extracts a daily snapshot of h
 1. On launch, the app requests read authorization for the relevant HealthKit types.
 2. `Refresh` fetches per-day statistics via `HKStatisticsQuery` / `HKSampleQuery`, running each day concurrently with `withTaskGroup`.
 3. The result is assembled into a `WeeklyHealthPayload` and rendered in the UI.
-4. `Send` encodes the payload to JSON and `POST`s it to the configured endpoint with a Bearer token.
+4. `Send` encodes the payload to JSON and `POST`s it to the ArogyaMandiram mobile app connector endpoint with a Bearer token.
 
 ---
 
@@ -84,7 +84,13 @@ clear `fatalError` rather than shipping a wrong value.
 >   binary and can be extracted by a determined attacker. Treat it as a shared
 >   API key, not a user secret, and **rotate the previously committed token**.
 
-The app sends a `POST` to `sendDataURL` with:
+In ArogyaMandiram, configure the matching values in **Settings → Connectors → ArogyaM Mobile App Connector**. The mobile app pushes to:
+
+```text
+<BASE_URL>/api/health-snapshots/<USERNAME>
+```
+
+The app sends a `POST` to that connector endpoint with:
 
 - `Content-Type: application/json`
 - `Authorization: Bearer <token>`
@@ -146,9 +152,14 @@ Notes:
 
 ## Getting started
 
+For simple setup guides, see:
+
+- [How to connect](HOW_TO_CONNECT.md)
+- [How to launch](HOW_TO_LAUNCH.md)
+
 1. Open `ArogyaM-iOS-v1.xcodeproj` in Xcode.
 2. Set your signing team under **Signing & Capabilities** (HealthKit must be enabled).
-3. Update `Config.swift` with your backend URL and token.
+3. Set the backend base URL, health username, and connector API token from **Settings → Connectors**.
 4. Select a physical device and run.
 5. Grant the requested Health permissions when prompted.
 6. Tap **Refresh** to extract the week, review the data, then **Send** to push it to your backend.
