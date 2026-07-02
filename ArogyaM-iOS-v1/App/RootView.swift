@@ -30,7 +30,6 @@ struct SplashView: View {
             Image("Kiki")
                 .resizable().scaledToFit()
                 .frame(width: 120, height: 120)
-                .shadow(color: Theme.violet.opacity(0.5), radius: 24, y: 10)
             Text("ArogyaM")
                 .font(Theme.display(34, .bold))
                 .foregroundStyle(Theme.text)

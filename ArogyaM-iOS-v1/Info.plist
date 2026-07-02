@@ -4,7 +4,21 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>ArogyaM</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.kethan.ArogyaM-iOS-v1.healthsync</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ArogyaM uses local network access to send your health data to your server.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ArogyaM uses the camera so you can snap a photo of your meal and log its nutrition.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ArogyaM uses the microphone so you can log meals, water and workouts by voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ArogyaM transcribes your voice so you can log health entries hands-free.</string>
 </dict>
 </plist>

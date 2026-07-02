@@ -7,6 +7,7 @@ final class HomeStore: ObservableObject {
     @Published var log: DailyLog?
     @Published var achievements: Achievements?
     @Published var health: HealthToday?
+    @Published var vitals: VitalsResponse?
     @Published var level = 1
     @Published var xpInto = 0
     @Published var xpForLevel = 100
@@ -22,8 +23,10 @@ final class HomeStore: ObservableObject {
         async let l: DailyLog? = try? await api.getEnveloped("/api/daily-log", query: ["date": date])
         async let a: AchievementsResponse? = try? await api.getEnveloped("/api/achievements")
         async let h: HealthMetricsResponse? = try? await api.getEnveloped("/api/health-metrics")
+        async let v: VitalsResponse? = try? await api.getEnveloped("/api/scores")
 
         user = await u
+        vitals = await v
         log = await l
         let ach = await a
         achievements = ach?.achievements
@@ -52,6 +55,7 @@ struct HomeView: View {
                 if store.isLoading && !store.loadedOnce {
                     ProgressView().tint(Theme.teal).padding(.top, 80)
                 } else {
+                    if store.vitals?.readiness?.score != nil { vitalsGlanceCard }
                     streakCard
                     calorieCard
                     statsGrid
@@ -64,9 +68,39 @@ struct HomeView: View {
             .padding(.bottom, AppShell.bottomBarInset)
         }
         .scrollIndicators(.hidden)
-        .background(Theme.bg)
         .refreshable { await store.load() }
         .task { if !store.loadedOnce { await store.load() } }
+    }
+
+    // MARK: - Vitals glance
+
+    private var vitalsGlanceCard: some View {
+        let score = store.vitals?.readiness?.score
+        let band = store.vitals?.guidance?.band
+        let tint = Theme.scoreColor(score)
+        return HStack(spacing: 16) {
+            ProgressRing(progress: (score ?? 0) / 100, tint: tint, size: 74, lineWidth: 9) {
+                Text(score.map { "\(Int($0.rounded()))" } ?? "···")
+                    .font(Theme.number(22, .heavy)).foregroundStyle(Theme.text)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("Readiness").font(Theme.display(17, .bold)).foregroundStyle(Theme.text)
+                    if let band {
+                        Text(band.capitalized)
+                            .font(Theme.body(11, .bold))
+                            .foregroundStyle(Theme.guidanceColor(band))
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(Capsule().fill(Theme.guidanceColor(band).opacity(0.15)))
+                    }
+                }
+                Text(store.vitals?.guidance?.reason ?? "Fresh scores, made just for you.")
+                    .font(Theme.body(12)).foregroundStyle(Theme.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .glassCard(tint: tint, padding: 16)
     }
 
     // MARK: - Header
@@ -152,7 +186,7 @@ struct HomeView: View {
         return VStack(alignment: .leading, spacing: 12) {
             caption("ACTIVE STREAKS")
             if items.isEmpty {
-                Text("No active streaks yet — log today to start one 🔥")
+                Text("No streaks yet. Log one little thing today and we'll start a fire 🔥")
                     .font(Theme.body(13))
                     .foregroundStyle(Theme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -263,7 +297,7 @@ struct HomeView: View {
             statCard("fork.knife", Theme.orange, "\(store.log?.meals?.count ?? 0)", "Meals",
                      "\(Int(store.log?.totalCalories ?? 0).formatted()) kcal logged")
             statCard("moon.fill", Theme.indigo,
-                     store.log?.sleep?.duration.map { String(format: "%.1f h", $0) } ?? "—", "Sleep",
+                     store.log?.sleep?.duration.map { String(format: "%.1f h", $0) } ?? "···", "Sleep",
                      "of \(Int(targets?.sleepHours ?? 8))h target")
         }
     }

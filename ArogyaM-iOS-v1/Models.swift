@@ -12,10 +12,26 @@ struct HealthSnapshot: Codable, Sendable {
     let activity: ActivityMetrics
     let sleep: SleepMetrics?
     let workouts: [WorkoutSummary]
+    let vitals: VitalsMetrics?
 }
 
 struct HeartMetrics: Codable, Sendable {
     let avgBpm: Int?
+    let restingBpm: Int?
+    let hrvSdnnMs: Double?
+}
+
+/// Recovery signals for the server-side readiness score. All optional —
+/// availability depends on hardware (wrist temperature needs an Apple Watch
+/// Series 8+ worn during sleep).
+struct VitalsMetrics: Codable, Sendable {
+    let respiratoryRate: Double?
+    let wristTempC: Double?
+    let vo2Max: Double?
+
+    var isEmpty: Bool {
+        respiratoryRate == nil && wristTempC == nil && vo2Max == nil
+    }
 }
 
 struct ActivityMetrics: Codable, Sendable {

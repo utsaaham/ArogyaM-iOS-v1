@@ -13,6 +13,11 @@ final class HealthKitService {
             HKQuantityType(.distanceWalkingRunning),
             HKCategoryType(.sleepAnalysis),
             HKObjectType.workoutType(),
+            HKQuantityType(.heartRateVariabilitySDNN),
+            HKQuantityType(.restingHeartRate),
+            HKQuantityType(.respiratoryRate),
+            HKQuantityType(.appleSleepingWristTemperature),
+            HKQuantityType(.vo2Max),
         ]
     }
 
@@ -52,23 +57,46 @@ final class HealthKitService {
         async let distM  = sum(.distanceWalkingRunning, unit: .meter(), on: date)
         async let sleepM = sleep(endingOn: date)
         async let work   = workouts(on: date)
+        async let restHR = average(.restingHeartRate, unit: HKUnit(from: "count/min"), on: date)
+        async let hrv    = average(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), on: date)
+        async let resp   = average(.respiratoryRate, unit: HKUnit(from: "count/min"), on: date)
+        async let wrist  = sleepWindowAverage(.appleSleepingWristTemperature, unit: .degreeCelsius(), endingOn: date)
+        async let vo2    = average(.vo2Max, unit: Self.vo2MaxUnit, on: date)
 
         let hrVal    = await hr
         let stepsVal = await steps ?? 0
         let calsVal  = await cals ?? 0
         let distMVal = await distM ?? 0
+        let restHRVal: Double? = await restHR
+        let hrvVal: Double?    = await hrv
+        let respVal: Double?   = await resp
+        let wristVal: Double?  = await wrist
+        let vo2Val: Double?    = await vo2
+
+        let vitals = VitalsMetrics(
+            respiratoryRate: respVal.map { round($0 * 10) / 10 },
+            wristTempC: wristVal.map { round($0 * 100) / 100 },
+            vo2Max: vo2Val.map { round($0 * 10) / 10 }
+        )
+
+        let heart = HeartMetrics(
+            avgBpm: hrVal,
+            restingBpm: restHRVal.map { Int($0.rounded()) },
+            hrvSdnnMs: hrvVal.map { round($0 * 10) / 10 }
+        )
 
         return HealthSnapshot(
             date: Self.isoDay.string(from: date),
             today: isToday ? true : nil,
-            heart: HeartMetrics(avgBpm: hrVal),
+            heart: heart,
             activity: ActivityMetrics(
                 steps: Int(stepsVal.rounded()),
                 activeCalories: Int(calsVal.rounded()),
                 distanceKm: round((distMVal / 1000.0) * 100) / 100
             ),
             sleep: await sleepM,
-            workouts: await work
+            workouts: await work,
+            vitals: vitals.isEmpty ? nil : vitals
         )
     }
 
@@ -118,6 +146,41 @@ final class HealthKitService {
             ) { _, result, _ in
                 let bpm = result?.averageQuantity()?.doubleValue(for: HKUnit(from: "count/min"))
                 cont.resume(returning: bpm.map { Int($0.rounded()) })
+            }
+            store.execute(q)
+        }
+    }
+
+    private func average(_ id: HKQuantityTypeIdentifier, unit: HKUnit, on date: Date) async -> Double? {
+        await withCheckedContinuation { cont in
+            let q = HKStatisticsQuery(
+                quantityType: HKQuantityType(id),
+                quantitySamplePredicate: dayPredicate(for: date),
+                options: .discreteAverage
+            ) { _, result, _ in
+                cont.resume(returning: result?.averageQuantity()?.doubleValue(for: unit))
+            }
+            store.execute(q)
+        }
+    }
+
+    /// Average over the sleep window (noon prior-day → noon-of-date) — for
+    /// metrics recorded overnight, like sleeping wrist temperature.
+    private func sleepWindowAverage(_ id: HKQuantityTypeIdentifier, unit: HKUnit, endingOn date: Date) async -> Double? {
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: date)
+        let start = cal.date(byAdding: .hour, value: -12, to: dayStart) ?? dayStart
+        let end = min(cal.date(byAdding: .hour, value: 12, to: dayStart) ?? date, Date())
+        guard end > start else { return nil }
+        let pred = HKQuery.predicateForSamples(withStart: start, end: end)
+
+        return await withCheckedContinuation { cont in
+            let q = HKStatisticsQuery(
+                quantityType: HKQuantityType(id),
+                quantitySamplePredicate: pred,
+                options: .discreteAverage
+            ) { _, result, _ in
+                cont.resume(returning: result?.averageQuantity()?.doubleValue(for: unit))
             }
             store.execute(q)
         }
@@ -240,6 +303,10 @@ final class HealthKitService {
     }
 
     // MARK: - Utilities
+
+    /// mL/(kg·min) — the canonical VO2 max unit.
+    static let vo2MaxUnit: HKUnit = HKUnit.literUnit(with: .milli)
+        .unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute()))
 
     private static let iso: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()

@@ -12,13 +12,14 @@ extension Color {
     }
 }
 
-/// Light, Apple-style design tokens (Health / Fitness / Music): grouped grey
-/// background, white rounded cards, SF Pro text, SF Rounded for big numbers,
-/// vibrant Apple system colors.
+/// Apple-style design tokens (Health / Fitness / Music): grouped grey
+/// background, clean white rounded cards, SF Pro text, SF Rounded numerals,
+/// vibrant system-color accents. No glows, no gradients behind content —
+/// color comes from the data, not the chrome.
 enum Theme {
     // Backgrounds / surfaces
-    static let bg = Color(hex: 0xF2F2F7)          // systemGroupedBackground
-    static let bgRaised = Color(hex: 0xFFFFFF)    // white card
+    static let bg = Color(hex: 0xF2F2F7)          // systemGroupedBackground base
+    static let bgRaised = Color(hex: 0xFFFFFF)
     static let card = Color(hex: 0xFFFFFF)
     static let surface = Color(hex: 0xEFEFF4)     // subtle fill (inputs, tracks)
 
@@ -61,9 +62,40 @@ enum Theme {
         .system(size: size, weight: weight, design: .default)
     }
 
-    /// App-wide light background.
+    /// App-wide light grouped background.
     static var backgroundGradient: some View {
         Theme.bg.ignoresSafeArea()
+    }
+
+    // MARK: - Score semantics (Vitals)
+
+    /// WHOOP-style banding: green when ready, amber in the middle, red when low.
+    static func scoreColor(_ score: Double?) -> Color {
+        guard let score else { return textMuted }
+        switch score {
+        case 67...: return green
+        case 34..<67: return amber
+        default: return red
+        }
+    }
+
+    static func guidanceColor(_ band: String?) -> Color {
+        switch band {
+        case "push": return green
+        case "maintain": return blue
+        case "recover": return amber
+        case "rest": return rose
+        default: return textMuted
+        }
+    }
+
+    static func stressColor(_ level: String?) -> Color {
+        switch level {
+        case "low": return green
+        case "moderate": return amber
+        case "high": return rose
+        default: return textMuted
+        }
     }
 }
 

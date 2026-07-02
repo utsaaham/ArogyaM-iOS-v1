@@ -1,49 +1,68 @@
 import SwiftUI
 
 enum AppTab: CaseIterable {
-    case home, water, food, health
+    case home, vitals, checklist, more
 }
 
 struct AppShell: View {
     @State private var tab: AppTab = .home
+    @State private var visited: Set<AppTab> = [.home]
     @State private var showAI = false
 
     /// Scroll views pad their bottom content by this amount so it clears the bar.
     static let bottomBarInset: CGFloat = 124
 
     var body: some View {
-        // Feature content — respects the safe area so scroll content sits
-        // below the status bar / Dynamic Island.
-        Group {
-            switch tab {
-            case .home:   HomeView()
-            case .water:  WaterView()
-            case .food:   FoodView()
-            case .health: HealthSyncView()
+        // Each tab builds lazily on first visit, then stays alive — switching
+        // tabs just cross-fades opacity instead of tearing the page down,
+        // rebuilding it, and refetching its data every time.
+        ZStack {
+            ZStack {
+                pane(.home) { HomeView() }
+                pane(.vitals) { VitalsView() }
+                pane(.checklist) { ChecklistView() }
+                pane(.more) { MoreView() }
             }
+            .animation(.easeInOut(duration: 0.18), value: tab)
+
+            // Tab bar layer ignores the keyboard, so typing slides the
+            // keyboard over the bar instead of pushing it up the screen.
+            VStack {
+                Spacer()
+                FloatingTabBar(selected: selectedTab) { showAI = true }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, -10)
+            }
+            .ignoresSafeArea(.keyboard)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .id(tab)
-        .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: tab)
-        // Dark ambient background fills the whole screen, behind the status
-        // bar and home indicator.
-        .background(deepBackground.ignoresSafeArea())
-        // Tab bar floats above the content as an overlay, so its width can
-        // never stretch the content past the screen edges.
-        .overlay(alignment: .bottom) {
-            FloatingTabBar(selected: $tab) { showAI = true }
-                .padding(.horizontal, 16)
-                .padding(.bottom, -10)
-        }
+        .background(Theme.backgroundGradient)
         .fullScreenCover(isPresented: $showAI) {
             AIAssistantView()
         }
+        .task {
+            AutoSyncService.shared.start()
+            await NotificationService.shared.bootstrap()
+        }
     }
 
-    // MARK: - Background
+    /// Marks tabs visited as they're selected so their pane mounts once.
+    private var selectedTab: Binding<AppTab> {
+        Binding(
+            get: { tab },
+            set: { newTab in
+                visited.insert(newTab)
+                tab = newTab
+            }
+        )
+    }
 
-    private var deepBackground: some View {
-        Theme.backgroundGradient
+    @ViewBuilder
+    private func pane<Content: View>(_ t: AppTab, @ViewBuilder content: () -> Content) -> some View {
+        if visited.contains(t) {
+            content()
+                .opacity(tab == t ? 1 : 0)
+                .allowsHitTesting(tab == t)
+        }
     }
 }

@@ -91,7 +91,6 @@ struct FoodView: View {
             .padding(.bottom, AppShell.bottomBarInset)
         }
         .scrollIndicators(.hidden)
-        .background(Theme.bg)
         .scrollDismissesKeyboard(.interactively)
         .task { if !store.loadedOnce { await store.loadToday() } }
         .sheet(item: $selected) { food in
@@ -178,7 +177,7 @@ struct FoodView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Logged today").font(Theme.body(13, .semibold)).tracking(0.6).foregroundStyle(Theme.textMuted)
             if store.meals.isEmpty {
-                Text("Nothing logged yet. Search above, or ask Kiki — “ate 2 eggs and toast”.")
+                Text("Nothing logged yet, and that's okay. Search above, or just tell Kiki “ate 2 eggs and toast” and she'll handle the rest 💛")
                     .font(Theme.body(13)).foregroundStyle(Theme.textMuted)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
             } else {

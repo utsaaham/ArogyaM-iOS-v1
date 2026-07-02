@@ -25,7 +25,6 @@ struct ProgressRing<Center: View>: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .shadow(color: tint.opacity(0.5), radius: 6)
             center()
         }
         .frame(width: size, height: size)
@@ -102,7 +101,7 @@ struct StatTile: View {
     }
 }
 
-// MARK: - Primary button
+// MARK: - Primary button (solid Apple-style fill)
 
 struct PrimaryButton: View {
     var title: String
@@ -125,13 +124,32 @@ struct PrimaryButton: View {
             .frame(height: 52)
             .foregroundStyle(.white)
             .background(
-                LinearGradient(colors: [tint, tint.opacity(0.82)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                tint,
                 in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
             )
-            .shadow(color: tint.opacity(0.4), radius: 12, y: 6)
         }
         .disabled(isLoading)
+    }
+}
+
+// MARK: - Small tinted capsule chip (Fitness style)
+
+struct GlassChip: View {
+    var text: String
+    var tint: Color
+    var systemImage: String?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage).font(.system(size: 11, weight: .bold))
+            }
+            Text(text).font(Theme.body(12, .semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Capsule().fill(tint.opacity(0.12)))
     }
 }
 

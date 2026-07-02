@@ -21,7 +21,6 @@ struct LoginView: View {
                         Image("Kiki")
                             .resizable().scaledToFit()
                             .frame(width: 118, height: 118)
-                            .shadow(color: Theme.violet.opacity(0.5), radius: 24, y: 10)
                         Text("ArogyaM")
                             .font(Theme.display(38, .bold))
                             .foregroundStyle(Theme.text)

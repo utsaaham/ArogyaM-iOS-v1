@@ -33,66 +33,18 @@ final class HealthSyncStore: ObservableObject {
         async let s = HealthKitService.shared.fetchConnectedSources()
         payload = await p
         sources = await s
+        AutoSyncService.shared.noteRefreshed()
     }
 
     func sync() async {
-        guard let payload, let today else {
-            setStatus("Nothing to sync yet — tap Refresh.", error: true)
-            return
-        }
         isSyncing = true
         defer { isSyncing = false }
 
-        // Push full 8-day snapshot to health-snapshots endpoint
-        do {
-            try await APIClient.shared.send(payload)
-        } catch {
-            print("[HealthSync] snapshot push failed:", error.localizedDescription)
-        }
-
-        var sleepCount = 0
-        var workoutCount = 0
-        do {
-            if let sleep = today.sleep, sleep.totalHours > 0,
-               let bedtime = sleep.bedtime, let wake = sleep.wake {
-                let quality = max(1, min(5, Int((sleep.totalHours / 2).rounded())))
-                struct SleepBody: Encodable {
-                    let date: String; let bedtime: String; let wakeTime: String
-                    let duration: Double; let quality: Int; let notes: String
-                }
-                let body = SleepBody(date: today.date, bedtime: bedtime, wakeTime: wake,
-                                     duration: sleep.totalHours, quality: quality,
-                                     notes: "Synced from Apple Health")
-                try await api.postExpectingSuccess("/api/sleep", json: try JSONEncoder().encode(body))
-                sleepCount = 1
-            }
-
-            for w in today.workouts {
-                struct WorkoutBody: Encodable {
-                    let date: String
-                    let workout: Inner
-                    struct Inner: Encodable {
-                        let exercise: String; let category: String
-                        let duration: Int; let caloriesBurned: Int
-                        let source: String; let notes: String
-                    }
-                }
-                let body = WorkoutBody(date: today.date, workout: .init(
-                    exercise: w.type, category: Self.category(for: w.type),
-                    duration: w.durationMin, caloriesBurned: w.calories,
-                    source: "device", notes: "Apple Health"
-                ))
-                try await api.postExpectingSuccess("/api/workouts", json: try JSONEncoder().encode(body))
-                workoutCount += 1
-            }
-
-            if sleepCount == 0 && workoutCount == 0 {
-                setStatus("Snapshot pushed. No sleep or workouts today to sync directly.", error: false)
-            } else {
-                setStatus("✅ Pushed snapshot · synced \(sleepCount) sleep · \(workoutCount) workout\(workoutCount == 1 ? "" : "s").", error: false)
-            }
-        } catch {
-            setStatus((error as? LocalizedError)?.errorDescription ?? error.localizedDescription, error: true)
+        let result = await AutoSyncService.shared.syncNow()
+        if result.sleep == 0 && result.workouts == 0 {
+            setStatus("✅ All synced. No sleep or workouts to send today, but your snapshot made it home safe.", error: false)
+        } else {
+            setStatus("✅ Synced! \(result.sleep) sleep and \(result.workouts) workout\(result.workouts == 1 ? "" : "s") made the trip to ArogyaM.", error: false)
         }
     }
 
@@ -100,33 +52,16 @@ final class HealthSyncStore: ObservableObject {
         status = text
         statusIsError = error
     }
-
-    static func category(for type: String) -> String {
-        switch type.lowercased() {
-        case let t where t.contains("run") || t.contains("walk") || t.contains("cycl")
-            || t.contains("hik") || t.contains("cardio") || t.contains("elliptical")
-            || t.contains("row") || t.contains("hiit"):
-            return "cardio"
-        case let t where t.contains("strength"):
-            return "strength"
-        case let t where t.contains("yoga") || t.contains("pilates"):
-            return "flexibility"
-        case let t where t.contains("core"):
-            return "core"
-        default:
-            return "other"
-        }
-    }
 }
 
 struct HealthSyncView: View {
-    @EnvironmentObject private var auth: AuthStore
     @StateObject private var store = HealthSyncStore()
+    @ObservedObject private var autoSync = AutoSyncService.shared
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                SectionTitle(title: "Health Sync", subtitle: "Apple Health → ArogyaM")
+                SectionTitle(title: "Health Sync", subtitle: "Your body, in sync")
                     .padding(.top, 6)
 
                 if !store.authorized && !store.isLoading {
@@ -138,9 +73,10 @@ struct HealthSyncView: View {
                     if !store.sources.isEmpty { sourcesCard }
                 }
 
+                if store.authorized { refreshButton }
                 syncButton
+                autoSyncStatus
                 if let status = store.status { statusBanner(status) }
-                logoutButton
             }
             .padding(.horizontal, 16)
             .padding(.bottom, AppShell.bottomBarInset)
@@ -173,13 +109,13 @@ struct HealthSyncView: View {
             let cols = [GridItem(.flexible()), GridItem(.flexible())]
             LazyVGrid(columns: cols, spacing: 10) {
                 metricCell("figure.walk", Theme.emerald, "Steps",
-                           t.map { formatted($0.activity.steps) } ?? "—")
+                           t.map { formatted($0.activity.steps) } ?? "···")
                 metricCell("flame.fill", Theme.orange, "Calories",
-                           t.map { "\($0.activity.activeCalories) kcal" } ?? "—")
+                           t.map { "\($0.activity.activeCalories) kcal" } ?? "···")
                 metricCell("map.fill", Theme.cyan, "Distance",
-                           t.map { String(format: "%.2f km", $0.activity.distanceKm) } ?? "—")
+                           t.map { String(format: "%.2f km", $0.activity.distanceKm) } ?? "···")
                 metricCell("heart.fill", Theme.pink, "Heart Rate",
-                           t?.heart.avgBpm.map { "\($0) bpm" } ?? "—")
+                           t?.heart.avgBpm.map { "\($0) bpm" } ?? "···")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -233,7 +169,7 @@ struct HealthSyncView: View {
                     }
                 }
             } else {
-                Text("No sleep data for today")
+                Text("No sleep data yet. Go dream a little and check back tomorrow 🌙")
                     .font(Theme.body(13)).foregroundStyle(Theme.textMuted)
             }
         }
@@ -299,7 +235,27 @@ struct HealthSyncView: View {
         .glassCard()
     }
 
-    // MARK: - Sync button
+    // MARK: - Refresh + sync buttons
+
+    private var refreshButton: some View {
+        Button { Task { await store.refresh() } } label: {
+            HStack(spacing: 8) {
+                if store.isLoading {
+                    ProgressView().tint(Theme.emerald)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+                Text(store.isLoading ? "Refreshing…" : "Refresh Health Data")
+                    .font(Theme.body(16, .semibold))
+            }
+            .foregroundStyle(Theme.emerald)
+            .frame(maxWidth: .infinity).frame(height: 52)
+            .background(RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                .fill(Theme.emerald.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isLoading)
+    }
 
     private var syncButton: some View {
         PrimaryButton(
@@ -309,7 +265,27 @@ struct HealthSyncView: View {
         ) { Task { await store.sync() } }
     }
 
-    // MARK: - Status / logout
+    // MARK: - Status
+
+    private var autoSyncStatus: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock.arrow.2.circlepath")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.textMuted)
+            Text("Auto syncs every hour · Refreshed \(Self.ago(autoSync.lastRefreshed)) · Synced \(Self.ago(autoSync.lastSynced))")
+                .font(Theme.body(12))
+                .foregroundStyle(Theme.textMuted)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 2)
+    }
+
+    private static func ago(_ date: Date?) -> String {
+        guard let date else { return "never" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f.localizedString(for: date, relativeTo: Date())
+    }
 
     private func statusBanner(_ text: String) -> some View {
         Text(text)
@@ -321,31 +297,15 @@ struct HealthSyncView: View {
                 .fill((store.statusIsError ? Theme.rose : Theme.emerald).opacity(0.12)))
     }
 
-    private var logoutButton: some View {
-        Button(role: .destructive) { auth.logout() } label: {
-            Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
-                .font(Theme.body(16, .semibold)).foregroundStyle(Theme.rose)
-                .frame(maxWidth: .infinity).frame(height: 52)
-                .background(RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
-                    .fill(Theme.rose.opacity(0.12)))
-        }
-        .buttonStyle(.plain)
-        .padding(.top, 4)
-    }
-
     // MARK: - Helpers
 
-    private func cardHeader(_ title: String, icon: String, tint: Color, refreshing: Bool) -> some View {
+    private func cardHeader(_ title: String, icon: String, tint: Color, refreshing: Bool = false) -> some View {
         HStack {
             Label(title, systemImage: icon)
                 .font(Theme.body(14, .semibold)).foregroundStyle(Theme.textSecondary)
             Spacer()
             if refreshing {
                 ProgressView().tint(tint).scaleEffect(0.8)
-            } else {
-                Button { Task { await store.refresh() } } label: {
-                    Image(systemName: "arrow.clockwise").foregroundStyle(tint)
-                }
             }
         }
     }

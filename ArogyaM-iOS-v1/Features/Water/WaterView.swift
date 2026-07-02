@@ -66,7 +66,6 @@ struct WaterView: View {
             .padding(.bottom, AppShell.bottomBarInset)
         }
         .scrollIndicators(.hidden)
-        .background(Theme.bg)
         .refreshable { await store.load() }
         .task { if !store.loadedOnce { await store.load() } }
     }

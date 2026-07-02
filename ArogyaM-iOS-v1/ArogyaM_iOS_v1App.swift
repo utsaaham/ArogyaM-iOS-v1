@@ -11,6 +11,10 @@ import SwiftUI
 struct ArogyaM_iOS_v1App: App {
     @StateObject private var auth = AuthStore()
 
+    init() {
+        AutoSyncService.registerBackgroundTask()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
